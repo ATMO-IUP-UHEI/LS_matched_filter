@@ -47,3 +47,9 @@ The background concentration is determined via the mean AMF.
 TODO: use total air column for this).
 The uas will be placed into uas/uas_{gas}.nc
 Copy it into the directory of the matched filter.
+
+## run
+
+run the matched filter from the rundir of the scenario.
+settings can be set inside of matched_filter.py.
+This includes the fit range and the matched filter version (linewise vs whole scene).
