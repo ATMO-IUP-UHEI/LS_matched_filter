@@ -1,0 +1,98 @@
+!*********************************************
+!*** Input for creating synthetic measurements
+!*********************************************
+
+
+&meta_time
+!*** only set these if no metadata is given in meteo inputfiles
+!*** or if you want to overwrite it
+year = 0
+month = 0
+day = 0
+hour = 0
+min = 0
+sec = 0 /
+
+
+
+!*** noise flags
+&noise_flag
+!*** flag: (one value per window)
+!*** -1 = no noise
+!***  0 = only shotnoise
+!***  1 = CO2IMAGE instrument noise model
+!***  2 = CO2M instrument noise model
+flag_rad = -1
+flag_irrad = -1 /
+
+
+
+!*** CO2IMAGE instrument noise parameters
+&co2image_noise_settings
+f_number = 2.4 !   Focal length/aperature ratio [-]
+optics_efficiency = 0.48 !   [-]
+pixel_pitch = 30 !   Width of (quadratic) detector pixels [um]
+quantum_efficiency = 0.8 !   [photons/e-]
+spectral_range = 900, 2500 !   Spectral range that the detector is sensitive to; lambda_1, lambda_2 [nm]
+background_temperature = 200 !   Background temperature [K]
+dark_current = 1.6 !   Dark current of the detector [fA/pix/s]
+readout_noise = 100 !   Readout noise of detector [e-]
+quantization_noise = 40 !   Quantization noise of detector [e-]
+binning_factor = 1 !   Integer describing how many detector pixels are binned in the spatial across-track (east-west) dimension for each effective pixel [-]
+integration_time = 70 / !   [ms]
+
+
+
+!*** satellite settings
+&satellite
+!*** satellite viewing geometry
+!*** szaflag:
+!*** 1 = give sza
+!*** 2 = sza from sun-synchronous orbit calculation (give altitude)
+!*** 3 = quick estimate of sza
+szaflag = 1
+sza = 0. !     [degrees]
+iza = 0. !     [degrees]
+iaz = 0. !     [degrees]
+saz = 0. !     [degrees]
+altitude = 600 / !     [km]
+
+
+
+!*** straylight
+&straylight
+!*** straylight_flag:
+!*** 0 = no straylight offset
+!*** 1 = constant straylight offset
+straylight_flag = 0
+!*** Straylight is a constant offset that is added to the low resolution spectrum.
+!*** This variable determines the amount of straylight relative to the maximum in-
+!*** tensity of the spectrum.
+straylight_offset = 0 /
+
+
+
+!*** residual image
+&residual_image
+!*** residual_image_flag:
+!*** 0 = no residual image
+!*** 1 = residual image from file. residual_image_path required.
+residual_image_flag = 0
+!*** Residual image is a spectrum that is added to the low resolution spectrum.
+!*** The following variables determine the file from which the residual image
+!*** is read and the intensity of the spectrum. The maximum intensity in the
+!*** spectrum of the residual image is set in relation to the maximum intensity
+!*** of the low resolution spectrum.
+residual_image_path = 'No Input'
+residual_image_intensity = 0 /
+
+
+
+!*** signal intensity transfer function
+&signal_intensity_transfer_function
+!*** sitf_flag:
+!*** 0 = no sitf
+!*** 1 = sitf from file. sitf_path required. sitf is the same for all detector pixels
+sitf_flag = 0
+!*** The following variable determines the file from which the sitf is read.
+sitf_path = 'No Input' /

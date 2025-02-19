@@ -1,0 +1,122 @@
+!*** Paths of input/outputfiles
+&paths
+path%spectrum = 'SYNTH_SPECTRA/'
+path%meteo = 'INPUT/'
+path%sun = '../../../input/solar/hybrid_reference_spectrum_c2021-03-04_with_unc.nc'
+path%mie = ''
+path%cirrus = ''
+path%ils = 'CONTRL_OUT/'
+path%output = 'CONTRL_OUT/' /
+
+&flags
+!*** atmosphere:
+!*** 0=custom
+!*** 1=AFGL
+!*** 2=ECHAM
+!*** 3=SICOR
+!*** 5=Indianapolis with Gaussian plume dispersion
+!*** 6=Indianapolis with LES plume dispersion
+!*** 7=Generate LUT with high-resoluiton spectral radiances
+flag%atm = 6
+!*** Scattering:
+!*** 0=non-scattering
+!*** 1=scattering with aerosol and cirrus specified below
+!*** 2=aerosol and cirrus from model/measurements
+!*** 3=aerosol from model/measurements (no cirrus)
+!*** 4=cirrus from model/measurements (no aerosol)
+flag%scat = 0
+!*** RTM:
+!*** 1=LINTRAN 1.0(Nakajima)
+!*** 2=LINTRAN 2.1 (Delta-M)
+!*** 3=LINTRAN 2.1 (Nakajima)
+flag%rtm = 3
+!*** fluorescence emission:
+!*** 0=none
+!*** 1=constant
+!*** 2=two co-added Gaussians
+flag%Fs = 0
+!*** ILS convolution:
+!*** 1=standard convolution
+!*** 2=Fast Fourier Convolution
+flag%ils = 1
+!*** ISRF:
+!*** 0=from S5P file
+!*** 1=inline calculation of Gaussian ISRF
+!*** 2=from custom file
+flag%ilscalc = 1
+!*** observer location
+!*** 0=in space
+!*** 1=within the atmosphere
+flag%observer_location = 0
+!*** solar spectrum
+!*** 0=KNMI NetCDF
+!*** 1=TSIS-1 HSRS NetCDF
+flag%solar = 1
+!*** Spectral grid:
+!*** 1=calculate measurement spectral grid
+!*** 2=read from custom file for S5P: 0=NIR+SWIR,-1=band6, -2=band7, -3=band8
+flag%inv = 1
+!*** Ocean glint retrievals:
+!*** 0=no
+!*** 1=yes
+flag%oceanglint = 1
+!*** Cross-section data:
+!*** 0=read from cross-section database
+!*** 1=read from ascii file stored in path%output when set to negative value
+flag%XS = 0
+!*** Output:
+!*** 0=standard output
+!*** 1=0+extra output
+!*** 2=1+screen output
+flag%output = 2 /
+
+&alt_grid
+!*** flag:
+!*** 1=equidistant pressure grid
+!*** 2=equidistant altitude grid
+grid%flag = 1
+!*** number of retrieval layers
+grid%nlay = 12
+!*** number of layers in RTM = nlay*nrt
+grid%nrt = 3
+!*** number of layers for cross-sections = nlay*nrt*natm
+grid%natm = 4 /
+
+&dim
+!*** number of spectral windows
+nwin = 1 /
+
+&nabs
+!*** number of absorbers per window
+ntype_abs(:) = 2 /
+
+&window1
+!*** lower boundary of spectral window [nm]
+wave_start = 1975
+!*** upper boundary of spectral window [nm]
+wave_stop = 2095
+!*** sampling
+reso = 0.005
+!*** full-width-half-maximum
+fwhm = 8.75
+!*** Oversampling ratio
+samp = 2.5
+!*** wavelength boundary offset (in multiples of fwhm)
+wvbd = 5
+!***Pair of bins for RT K-binning (#1st absorber > #2nd absorber)
+ntau = 20
+ntau_2nd_max = 15
+!*** Absorber type (HITRAN index)
+type_x(1) = 2
+!*** Targetflag: 0=interfering absorber, 1=target absorber
+type_x_flag(1) = 1
+!*** Format of cross-section database: 0=Frankenberg, 1=Butz, 2=netCDF, 3=single netCDF file
+type_xsdb(1) = 0
+!*** Path to XSDB
+xsdb_path(1) = '../../../input/xsdb/voigt/co2_4000_7000_hit20.xs'
+type_x(2) = 1
+type_x_flag(2) = 0
+type_xsdb(2) = 0
+xsdb_path(2) = '../../../input/xsdb/voigt/h2o_4000_7000_hit20.xs'
+!*** Albedo: 0=use satellite data , 1=0th order, 2=1st order, 3=2nd order
+albflag = 0 /
