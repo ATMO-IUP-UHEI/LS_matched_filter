@@ -6,11 +6,11 @@ import os
 
 
 def main():
-    # matched filter method: linewise, whole_scene
     settings = {
         "uas_grid": "mean_amf",  # mean_amf, airmass
         "method": "linewise",  # linewise, whole_scene
         "iterative": True,  # bool
+        "iterations": 3,  # int
     }
 
     root_data = xr.open_dataset("SYNTH_SPECTRA/L1B_DATA.nc")
@@ -22,25 +22,9 @@ def main():
     win = [[2120, 2430]]
     alpha_ch4 = matched_filter("ch4", win, settings)
 
-    plt.xlabel("Longitude / degree")
-    plt.ylabel("Latitude / degree")
-    plt.pcolor(
-        root_data.longitude, root_data.latitude, alpha_co2,
-        cmap="inferno_r"
-    )
-    plt.colorbar(label="XCO2 enhancement / ppm")
-    plt.show()
+    # plot_alpha(root_data, alpha_co2, alpha_ch4)
 
-    plt.xlabel("Longitude / degree")
-    plt.ylabel("Latitude / degree")
-    plt.pcolor(
-        root_data.longitude, root_data.latitude, alpha_ch4,
-        cmap="inferno_r"
-    )
-    plt.colorbar(label="XCH4 enhancement / ppm")
-    plt.show()
-
-    write_output(root_data, alpha_co2, alpha_ch4)
+    # write_output(root_data, alpha_co2, alpha_ch4)
 
 
 def matched_filter(gas, win, settings):
@@ -57,16 +41,40 @@ def matched_filter(gas, win, settings):
     norm = 1e11
     x = x / norm
 
-    # calculate statistical properties mu (mean radiance) and cov (covariance matrix)
-    mu, cov, cov_inv = statistical_properties(x, settings)
+    match settings["iterative"]:
+        case True:
+            max_iter = settings["iterations"]+1
+        case False:
+            max_iter = 1
 
-    # get target signature
-    t = mu * s
+    for iter in range(1, max_iter):
+        print(f"{iter=}")
 
-    # run matched filter
-    alpha = run_matched_filter(x, mu, cov_inv, t)
+        if iter == 1:
+            # filter x for anomalous pixels
+            mask =\
+                (x.sum(dim="wavelength") > 0.1 * x.median(dim={"frame", "line"}).sum("wavelength")) &\
+                (x.sum(dim="wavelength") < 2 * x.median(dim={"frame", "line"}).sum("wavelength"))
+        else:
+            # filter x for unrealistic alpha
+            mask =\
+                (mask) &\
+                (alpha.values > -5) &\
+                (alpha.values < +5)
 
-    # output_debug_info(alpha, x, mu, t, cov, cov_inv)
+        x_masked = x.where(mask)
+
+        # calculate statistical properties mu (mean radiance) and cov (covariance matrix)
+        # also output inverse of covariance matrix and condition number of inversion
+        mu, cov, cov_inv = statistical_properties(x_masked, settings)
+
+        # get target signature
+        t = mu * s
+
+        # run matched filter
+        alpha = run_matched_filter(x, mu, cov_inv, t)
+
+        plot_debug(gas, iter, alpha, x, mu, t, cov, cov_inv)
 
     return alpha
 
@@ -133,25 +141,25 @@ def get_variables(gas, win, settings):
     return wl, x, s
 
 
-def statistical_properties(x, settings):
+def statistical_properties(x_masked, settings):
     match settings["method"]:
         case "whole_scene":
-            Nframes = x.sizes["frame"]
-            Nlines = x.sizes["line"]
+            Nframes = x_masked.sizes["frame"]
+            Nlines = x_masked.sizes["line"]
 
             # for calculations, stack both spatial dimensions of x onto one
-            x = x.stack(pixel=("frame", "line"))
+            x_masked = x_masked.stack(pixel=("frame", "line"))
 
             # get mu on the same grid as x
-            mu = x.mean(dim="frame")
-            mu = mu.expand_dims(dim={"frame": Nframes})
+            mu = x_masked.mean(dim="pixel")
+            mu = mu.expand_dims(dim={"frame": Nframes, "line": Nlines})
 
             # get cov on the same grid as x
             # but with the dimension wavelength/wavelength
             # also get cov_inv
             cov = xr.apply_ufunc(
-                lambda x: np.cov(x, rowvar=False),
-                x,
+                lambda x: covariance_skipna(x),
+                x_masked,
                 input_core_dims=[["pixel", "wavelength"]],
                 output_core_dims=[["wavelength1", "wavelength2"]],
                 vectorize=True,
@@ -165,21 +173,20 @@ def statistical_properties(x, settings):
             )
             cov = cov.expand_dims(dim={"frame": Nframes, "line": Nlines})
             cov_inv = cov_inv.expand_dims(dim={"frame": Nframes, "line": Nlines})
-            print(f"condition number: {np.linalg.cond(cov[0, 0, :, :])}")
 
         case "linewise":
-            Nframes = x.sizes["frame"]
+            Nframes = x_masked.sizes["frame"]
 
             # get mu on the same grid as x
-            mu = x.mean(dim="frame")
+            mu = x_masked.mean(dim="frame", skipna=True)
             mu = mu.expand_dims(dim={"frame": Nframes})
 
             # get cov on the same grid as x
             # but with the dimension wavelength/wavelength
             # also get cov_inv
             cov = xr.apply_ufunc(
-                lambda x: np.cov(x, rowvar=False),
-                x,
+                lambda x: covariance_skipna(x),
+                x_masked,
                 input_core_dims=[["frame", "wavelength"]],
                 output_core_dims=[["wavelength1", "wavelength2"]],
                 vectorize=True,
@@ -193,12 +200,18 @@ def statistical_properties(x, settings):
             )
             cov = cov.expand_dims(dim={"frame": Nframes})
             cov_inv = cov_inv.expand_dims(dim={"frame": Nframes})
-            print(f"condition number: {np.linalg.cond(cov[0, 0, :, :])}")
 
         case _:
             sys.exit(f"method {settings['method']} not implemented.")
 
     return mu, cov, cov_inv
+
+
+def covariance_skipna(x_masked):
+    x_filtered = x_masked[~np.isnan(x_masked).all(axis=1)]
+    cov = np.cov(x_filtered, rowvar=False)
+
+    return cov
 
 
 def run_matched_filter(x, mu, cov_inv, t):
@@ -207,37 +220,71 @@ def run_matched_filter(x, mu, cov_inv, t):
     den = np.einsum("fli,flij,flj->fl", t, cov_inv, t)
     alpha = num/den
 
+    alpha = xr.DataArray(alpha, dims={"frame", "line"})
+
     return alpha
 
 
-def output_debug_info(alpha, x, mu, t, cov, cov_inv):
+def plot_debug(gas, iter, alpha, x, mu, t, cov, cov_inv):
+    frame = 0
+    line = 0
+
+    # calculate condition number
+    ncond = np.linalg.cond(cov[frame, line, :, :])
+    print(f"condition number = {ncond}")
+
     # print(f"{x.dims=}")
     # print(f"{mu.dims=}")
     # print(f"{t.dims=}")
     # print(f"{cov.dims=}")
     # print(f"{cov_inv.dims=}")
 
+    plt.title(f"alpha for {gas}, {iter=}, pixel=[{frame}, {line}]")
     plt.imshow(alpha, origin="lower", cmap="inferno_r")
     plt.colorbar()
     plt.show()
 
-    # plt.plot(x[0, 0, :], label="x")
-    # plt.plot(mu[0, 0, :], label="mu")
+    # plt.title(f"example spectrum for {gas}, {iter=}, pixel=[{frame}, {line}]")
+    # plt.plot(x[frame, line, :], label="x")
+    # plt.plot(mu[frame, line, :], label="mu")
     # plt.legend()
     # plt.show()
 
-    # plt.plot(x[0, 0, :] - mu[0, 0, :], label="diff")
-    # plt.plot(t[0, 0, :], label="t")
+    # plt.title(f"example target signature and residual for {gas}, {iter=}, pixel=[{frame}, {line}]")
+    # plt.plot(x[frame, line, :] - mu[frame, line, :], label="diff")
+    # plt.plot(t[frame, line, :], label="t")
     # plt.legend()
     # plt.show()
 
-    # plt.imshow(cov[0, 0, :, :])
+    plt.title(f"covariance matrix for {gas}, {iter=}, pixel=[{frame}, {line}]\ncondition number = {ncond}")
+    plt.imshow(cov[frame, line, :, :])
+    plt.colorbar()
+    plt.show()
+
+    # plt.title(f"inverse of covariance matrix for {gas}, {iter=}, pixel=[{frame}, {line}]\ncondition number = {ncond}")
+    # plt.imshow(cov_inv[frame, line, :, :])
     # plt.colorbar()
     # plt.show()
 
-    # plt.imshow(cov_inv[0, 0, :, :])
-    # plt.colorbar()
-    # plt.show()
+
+def plot_alpha(root_data, alpha_co2, alpha_ch4):
+    plt.xlabel("Longitude / degree")
+    plt.ylabel("Latitude / degree")
+    plt.pcolor(
+        root_data.longitude, root_data.latitude, alpha_co2,
+        cmap="inferno_r"
+    )
+    plt.colorbar(label="XCO2 enhancement / ppm")
+    plt.show()
+
+    plt.xlabel("Longitude / degree")
+    plt.ylabel("Latitude / degree")
+    plt.pcolor(
+        root_data.longitude, root_data.latitude, alpha_ch4,
+        cmap="inferno_r"
+    )
+    plt.colorbar(label="XCH4 enhancement / ppm")
+    plt.show()
 
 
 def write_output(root_data, alpha_co2, alpha_ch4):
