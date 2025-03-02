@@ -17,12 +17,13 @@ def main():
 
     # run matched filter
     win = [[1975, 2095]]
-    alpha_co2 = matched_filter("co2", win, settings)
+    alpha_co2, mask_co2 = matched_filter("co2", win, settings)
 
     win = [[2120, 2430]]
-    alpha_ch4 = matched_filter("ch4", win, settings)
+    alpha_ch4, mask_ch4 = matched_filter("ch4", win, settings)
 
     # plot_alpha(root_data, alpha_co2, alpha_ch4)
+    plot_mask(root_data, mask_co2, mask_ch4)
 
     # write_output(root_data, alpha_co2, alpha_ch4)
 
@@ -47,25 +48,33 @@ def matched_filter(gas, win, settings):
         case False:
             max_iter = 1
 
+    # create mask that is applied for the purposes of calculating statistics
+    mask = np.zeros(shape=(x.shape[0], x.shape[1], 1))  # one dimension for spectral grid
+
     for iter in range(1, max_iter):
         print(f"{iter=}")
 
         if iter == 1:
             # filter x for anomalous pixels
-            mask =\
-                (x.sum(dim="wavelength") > 0.1 * x.median(dim={"frame", "line"}).sum("wavelength")) &\
-                (x.sum(dim="wavelength") < 2 * x.median(dim={"frame", "line"}).sum("wavelength"))
+            anom = np.array(
+                (x.sum(dim="wavelength") < 0.1 * x.median(dim={"frame", "line"}).sum("wavelength")) |\
+                (x.sum(dim="wavelength") > 2 * x.median(dim={"frame", "line"}).sum("wavelength"))
+            )
+
+            mask[anom] = iter
         else:
             # filter x for unrealistic alpha
-            mask =\
-                (mask) &\
-                (alpha.values > -5) &\
-                (alpha.values < +5)
+            anom = np.array(
+                (alpha.values < -10) |\
+                (alpha.values > +10)
+            )
 
-        x_masked = x.where(mask)
+            # set mask to iteration number only where currently unmasked
+            mask[anom[..., np.newaxis] & (mask==0)] = iter
 
         # calculate statistical properties mu (mean radiance) and cov (covariance matrix)
         # also output inverse of covariance matrix and condition number of inversion
+        x_masked = x.where(mask == 0, np.nan)
         mu, cov, cov_inv = statistical_properties(x_masked, settings)
 
         # get target signature
@@ -74,9 +83,9 @@ def matched_filter(gas, win, settings):
         # run matched filter
         alpha = run_matched_filter(x, mu, cov_inv, t)
 
-        plot_debug(gas, iter, alpha, x, mu, t, cov, cov_inv)
+        plot_debug(gas, iter, alpha, x, mu, t, cov, cov_inv, mask)
 
-    return alpha
+    return alpha, mask[:, :, 0]
 
 
 def get_variables(gas, win, settings):
@@ -225,7 +234,7 @@ def run_matched_filter(x, mu, cov_inv, t):
     return alpha
 
 
-def plot_debug(gas, iter, alpha, x, mu, t, cov, cov_inv):
+def plot_debug(gas, iter, alpha, x, mu, t, cov, cov_inv, mask):
     frame = 0
     line = 0
 
@@ -239,10 +248,10 @@ def plot_debug(gas, iter, alpha, x, mu, t, cov, cov_inv):
     # print(f"{cov.dims=}")
     # print(f"{cov_inv.dims=}")
 
-    plt.title(f"alpha for {gas}, {iter=}, pixel=[{frame}, {line}]")
-    plt.imshow(alpha, origin="lower", cmap="inferno_r")
-    plt.colorbar()
-    plt.show()
+    # plt.title(f"alpha for {gas}, {iter=}, pixel=[{frame}, {line}]")
+    # plt.imshow(alpha, origin="lower", cmap="inferno_r")
+    # plt.colorbar()
+    # plt.show()
 
     # plt.title(f"example spectrum for {gas}, {iter=}, pixel=[{frame}, {line}]")
     # plt.plot(x[frame, line, :], label="x")
@@ -256,13 +265,18 @@ def plot_debug(gas, iter, alpha, x, mu, t, cov, cov_inv):
     # plt.legend()
     # plt.show()
 
-    plt.title(f"covariance matrix for {gas}, {iter=}, pixel=[{frame}, {line}]\ncondition number = {ncond}")
-    plt.imshow(cov[frame, line, :, :])
-    plt.colorbar()
-    plt.show()
+    # plt.title(f"covariance matrix for {gas}, {iter=}, pixel=[{frame}, {line}]\ncondition number = {ncond}")
+    # plt.imshow(cov[frame, line, :, :])
+    # plt.colorbar()
+    # plt.show()
 
     # plt.title(f"inverse of covariance matrix for {gas}, {iter=}, pixel=[{frame}, {line}]\ncondition number = {ncond}")
     # plt.imshow(cov_inv[frame, line, :, :])
+    # plt.colorbar()
+    # plt.show()
+
+    # plt.title(f"mask, {iter=}")
+    # plt.imshow(mask[..., 0], origin="lower")
     # plt.colorbar()
     # plt.show()
 
@@ -284,6 +298,26 @@ def plot_alpha(root_data, alpha_co2, alpha_ch4):
         cmap="inferno_r"
     )
     plt.colorbar(label="XCH4 enhancement / ppm")
+    plt.show()
+
+
+def plot_mask(root_data, mask_co2, mask_ch4):
+    plt.xlabel("Longitude / degree")
+    plt.ylabel("Latitude / degree")
+    plt.pcolor(
+        root_data.longitude, root_data.latitude, mask_co2,
+        cmap="bone_r"
+    )
+    plt.colorbar()
+    plt.show()
+
+    plt.xlabel("Longitude / degree")
+    plt.ylabel("Latitude / degree")
+    plt.pcolor(
+        root_data.longitude, root_data.latitude, mask_ch4,
+        cmap="bone_r"
+    )
+    plt.colorbar()
     plt.show()
 
 
