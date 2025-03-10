@@ -27,8 +27,8 @@ def main():
     alpha_ch4, dalpha_ch4, cov_ch4, cov_inv_ch4, mask_ch4 =\
         matched_filter("ch4", win, settings)
 
-    plot_map(root_data, alpha_co2, dalpha_co2, mask_co2, "co2")
-    plot_map(root_data, alpha_ch4, dalpha_ch4, mask_ch4, "ch4")
+    # plot_map(root_data, alpha_co2, dalpha_co2, mask_co2, "co2")
+    # plot_map(root_data, alpha_ch4, dalpha_ch4, mask_ch4, "ch4")
 
     write_output(
         root_data,
