@@ -1,31 +1,40 @@
 import xarray as xr
 import numpy as np
 import matplotlib.pyplot as plt
+from mpl_toolkits.axes_grid1 import make_axes_locatable
+from scipy.optimize import curve_fit
 import sys
 import os
 
 
 def main():
     settings = {
-        "uas_grid": "mean_amf",  # mean_amf, airmass
+        "uas_grid": "mean_amf",  # mean_amf, airmass (not implemented yet)
         "method": "linewise",  # linewise, whole_scene
-        "iterative": True,  # bool
+        "iterative": True,  # True, False (False sets iterations=1)
         "iterations": 3,  # int
+        "alpha_mask": "nee"  # nee
     }
 
     root_data = xr.open_dataset("SYNTH_SPECTRA/L1B_DATA.nc")
 
     # run matched filter
     win = [[1975, 2095]]
-    alpha_co2, mask_co2 = matched_filter("co2", win, settings)
+    alpha_co2, dalpha_co2, cov_co2, cov_inv_co2, mask_co2 =\
+        matched_filter("co2", win, settings)
 
     win = [[2120, 2430]]
-    alpha_ch4, mask_ch4 = matched_filter("ch4", win, settings)
+    alpha_ch4, dalpha_ch4, cov_ch4, cov_inv_ch4, mask_ch4 =\
+        matched_filter("ch4", win, settings)
 
-    # plot_alpha(root_data, alpha_co2, alpha_ch4)
-    plot_mask(root_data, mask_co2, mask_ch4)
+    plot_map(root_data, alpha_co2, dalpha_co2, mask_co2, "co2")
+    plot_map(root_data, alpha_ch4, dalpha_ch4, mask_ch4, "ch4")
 
-    # write_output(root_data, alpha_co2, alpha_ch4)
+    write_output(
+        root_data,
+        alpha_co2, dalpha_co2, cov_co2, cov_inv_co2, mask_co2,
+        alpha_ch4, dalpha_ch4, cov_ch4, cov_inv_ch4, mask_ch4
+    )
 
 
 def matched_filter(gas, win, settings):
@@ -34,11 +43,13 @@ def matched_filter(gas, win, settings):
         f"for gas {gas} with {len(win)} fit windows with boundaries {win}."
     )
 
-    # get wavelength grid, radiances on the spatial grid, and the unit absorption spectrum
+    # get wavelength grid, radiances on the spatial grid, and the
+    # unit absorption spectrum
     wl, x, s = get_variables(gas, win, settings)
 
-    # normalize radiances for numerical reasons. t (the target signature) will be normalized
-    # automatically, since it is calculated from mu*s, where mu is calculated from x.
+    # normalize radiances for numerical reasons. t (the target signature)
+    # will be normalized automatically, since it is calculated from mu*s,
+    # where mu is calculated from x.
     norm = 1e11
     x = x / norm
 
@@ -49,7 +60,8 @@ def matched_filter(gas, win, settings):
             max_iter = 1
 
     # create mask that is applied for the purposes of calculating statistics
-    mask = np.zeros(shape=(x.shape[0], x.shape[1], 1))  # one dimension for spectral grid
+    # one dimension for spectral grid
+    mask = np.zeros(shape=(x.shape[0], x.shape[1], 1))
 
     for iter in range(1, max_iter):
         print(f"{iter=}")
@@ -57,23 +69,23 @@ def matched_filter(gas, win, settings):
         if iter == 1:
             # filter x for anomalous pixels
             anom = np.array(
-                (x.sum(dim="wavelength") < 0.1 * x.median(dim={"frame", "line"}).sum("wavelength")) |\
-                (x.sum(dim="wavelength") > 2 * x.median(dim={"frame", "line"}).sum("wavelength"))
+                (x.sum(dim="wavelength") < 0.1 *
+                    x.median(dim={"frame", "line"}).sum("wavelength")) |
+                (x.sum(dim="wavelength") > 2 *
+                 x.median(dim={"frame", "line"}).sum("wavelength"))
             )
 
             mask[anom] = iter
         else:
-            # filter x for unrealistic alpha
-            anom = np.array(
-                (alpha.values < -10) |\
-                (alpha.values > +10)
-            )
+            # filter x for anomalous alpha values
+            anom = get_alpha_mask(alpha, dalpha, mask, settings["alpha_mask"])
 
             # set mask to iteration number only where currently unmasked
-            mask[anom[..., np.newaxis] & (mask==0)] = iter
+            mask[anom[..., np.newaxis] & (mask == 0)] = iter
 
-        # calculate statistical properties mu (mean radiance) and cov (covariance matrix)
-        # also output inverse of covariance matrix and condition number of inversion
+        # calculate statistical properties mu (mean radiance) and
+        # cov (covariance matrix). also output inverse of covariance matrix
+        # and condition number of inversion
         x_masked = x.where(mask == 0, np.nan)
         mu, cov, cov_inv = statistical_properties(x_masked, settings)
 
@@ -81,11 +93,11 @@ def matched_filter(gas, win, settings):
         t = mu * s
 
         # run matched filter
-        alpha = run_matched_filter(x, mu, cov_inv, t)
+        alpha, dalpha = run_matched_filter(x, mu, cov_inv, t)
 
-        plot_debug(gas, iter, alpha, x, mu, t, cov, cov_inv, mask)
+        plot_debug(gas, iter, alpha, dalpha, x, mu, t, cov, cov_inv, mask)
 
-    return alpha, mask[:, :, 0]
+    return alpha, dalpha, cov, cov_inv, mask[:, :, 0]
 
 
 def get_variables(gas, win, settings):
@@ -150,6 +162,28 @@ def get_variables(gas, win, settings):
     return wl, x, s
 
 
+def get_alpha_mask(alpha, dalpha, mask, method):
+    match method:
+        case "nee":
+            # disregard pixels that are filtered out in the first iteration
+            alpha = alpha.where(mask[..., 0] != 1, np.nan)
+            mu = np.nanmean(alpha)
+
+            anom = np.array(
+                (alpha < mu - 3 * dalpha) |
+                (alpha > mu + 3 * dalpha)
+            )
+
+            return anom
+
+        case _:
+            sys.exit(f"alpha_mask method {method} not implemented.")
+
+
+def gaussian(x, n, mu, sigma):
+    return n * np.exp(-0.5 * ((x - mu) / sigma)**2)
+
+
 def statistical_properties(x_masked, settings):
     match settings["method"]:
         case "whole_scene":
@@ -181,7 +215,8 @@ def statistical_properties(x_masked, settings):
                 vectorize=True,
             )
             cov = cov.expand_dims(dim={"frame": Nframes, "line": Nlines})
-            cov_inv = cov_inv.expand_dims(dim={"frame": Nframes, "line": Nlines})
+            cov_inv = cov_inv.expand_dims(
+                dim={"frame": Nframes, "line": Nlines})
 
         case "linewise":
             Nframes = x_masked.sizes["frame"]
@@ -224,17 +259,24 @@ def covariance_skipna(x_masked):
 
 
 def run_matched_filter(x, mu, cov_inv, t):
-    # calculate alpha on the same grid as x
+    # alpha = (x - mu) cinv t / t cinv t
+    # dalpha = 1/sqrt(t cinv t)
     num = np.einsum("fli,flij,flj->fl", (x-mu), cov_inv, t)
     den = np.einsum("fli,flij,flj->fl", t, cov_inv, t)
+
+    # calculate alpha on the same grid as x
     alpha = num/den
 
+    # calculate dalpha on the same grid as x
+    dalpha = 1 / np.sqrt(den)
+
     alpha = xr.DataArray(alpha, dims={"frame", "line"})
+    dalpha = xr.DataArray(dalpha, dims={"frame", "line"})
 
-    return alpha
+    return alpha, dalpha
 
 
-def plot_debug(gas, iter, alpha, x, mu, t, cov, cov_inv, mask):
+def plot_debug(gas, iter, alpha, dalpha, x, mu, t, cov, cov_inv, mask):
     frame = 0
     line = 0
 
@@ -250,6 +292,11 @@ def plot_debug(gas, iter, alpha, x, mu, t, cov, cov_inv, mask):
 
     # plt.title(f"alpha for {gas}, {iter=}, pixel=[{frame}, {line}]")
     # plt.imshow(alpha, origin="lower", cmap="inferno_r")
+    # plt.colorbar()
+    # plt.show()
+
+    # plt.title(f"dalpha for {gas}, {iter=}, pixel=[{frame}, {line}]")
+    # plt.imshow(dalpha, origin="lower", cmap="coolwarm")
     # plt.colorbar()
     # plt.show()
 
@@ -281,54 +328,109 @@ def plot_debug(gas, iter, alpha, x, mu, t, cov, cov_inv, mask):
     # plt.show()
 
 
-def plot_alpha(root_data, alpha_co2, alpha_ch4):
-    plt.xlabel("Longitude / degree")
-    plt.ylabel("Latitude / degree")
-    plt.pcolor(
-        root_data.longitude, root_data.latitude, alpha_co2,
+def plot_map(root_data, alpha, dalpha, mask, gas):
+    fig, axs = plt.subplots(
+        nrows=1, ncols=3,
+        sharex=True, sharey=True
+    )
+
+    axs[0].set_title(f"alpha {gas}")
+    axs[0].set_xlabel("Longitude / degree")
+    axs[0].set_ylabel("Latitude / degree")
+    img0 = axs[0].pcolor(
+        root_data.longitude, root_data.latitude, alpha,
         cmap="inferno_r"
     )
-    plt.colorbar(label="XCO2 enhancement / ppm")
-    plt.show()
+    divider = make_axes_locatable(axs[0])
+    cax = divider.append_axes("right", size="5%", pad=0.05)
+    cbar = fig.colorbar(img0, cax=cax, orientation="vertical")
+    cbar.set_label(f"X{gas.upper()} enhancement / ppm")
 
-    plt.xlabel("Longitude / degree")
-    plt.ylabel("Latitude / degree")
-    plt.pcolor(
-        root_data.longitude, root_data.latitude, alpha_ch4,
+    axs[1].set_title(f"dalpha {gas}")
+    axs[1].set_xlabel("Longitude / degree")
+    axs[1].set_ylabel("Latitude / degree")
+    img1 = axs[1].pcolor(
+        root_data.longitude, root_data.latitude, dalpha,
         cmap="inferno_r"
     )
-    plt.colorbar(label="XCH4 enhancement / ppm")
-    plt.show()
+    divider = make_axes_locatable(axs[1])
+    cax = divider.append_axes("right", size="5%", pad=0.05)
+    cbar = fig.colorbar(img1, cax=cax, orientation="vertical")
+    cbar.set_label(f"X{gas.upper()} enhancement error / ppm")
 
-
-def plot_mask(root_data, mask_co2, mask_ch4):
-    plt.xlabel("Longitude / degree")
-    plt.ylabel("Latitude / degree")
-    plt.pcolor(
-        root_data.longitude, root_data.latitude, mask_co2,
+    axs[2].set_title(f"mask {gas}")
+    axs[2].set_xlabel("Longitude / degree")
+    axs[2].set_ylabel("Latitude / degree")
+    img2 = axs[2].pcolor(
+        root_data.longitude, root_data.latitude, mask,
         cmap="bone_r"
     )
-    plt.colorbar()
-    plt.show()
+    divider = make_axes_locatable(axs[2])
+    cax = divider.append_axes("right", size="5%", pad=0.05)
+    cbar = fig.colorbar(img2, cax=cax, orientation="vertical")
+    cbar.set_label(f"X{gas.upper()} enhancement error / ppm")
 
-    plt.xlabel("Longitude / degree")
-    plt.ylabel("Latitude / degree")
-    plt.pcolor(
-        root_data.longitude, root_data.latitude, mask_ch4,
-        cmap="bone_r"
-    )
-    plt.colorbar()
-    plt.show()
+    plt.show(block=True)
 
 
-def write_output(root_data, alpha_co2, alpha_ch4):
+def write_output(root_data,
+                 alpha_co2, dalpha_co2, cov_co2, cov_inv_co2, mask_co2,
+                 alpha_ch4, dalpha_ch4, cov_ch4, cov_inv_ch4, mask_ch4
+                 ):
     mtf_out_data = xr.Dataset()
+
     mtf_out_data["latitude"] = root_data.latitude
     mtf_out_data["longitude"] = root_data.longitude
-    mtf_out_data["x_type0002_enh"] = xr.DataArray(
-        data=alpha_co2, dims=("frame", "line")).astype("float32")
-    mtf_out_data["x_type0006_enh"] = xr.DataArray(
-        data=alpha_ch4, dims=("frame", "line")).astype("float32")
+
+    mtf_out_data["alpha_co2"] = xr.DataArray(
+        data=alpha_co2,
+        dims=("frame", "line")
+    ).astype("float32")
+
+    mtf_out_data["dalpha_co2"] = xr.DataArray(
+        data=dalpha_co2,
+        dims=("frame", "line")
+    ).astype("float32")
+
+    mtf_out_data["cov_co2"] = xr.DataArray(
+        data=cov_co2[0, :, :, :],
+        dims=("line", "wavelength1_co2", "wavelength2_co2")
+    ).astype("float32")
+
+    mtf_out_data["cov_inv_co2"] = xr.DataArray(
+        data=cov_inv_co2[0, :, :, :],
+        dims=("line", "wavelength1_co2", "wavelength2_co2")
+    ).astype("float32")
+
+    mtf_out_data["mask_co2"] = xr.DataArray(
+        data=mask_co2,
+        dims=("frame", "line")
+    ).astype("float32")
+
+    mtf_out_data["alpha_ch4"] = xr.DataArray(
+        data=alpha_ch4,
+        dims=("frame", "line")
+    ).astype("float32")
+
+    mtf_out_data["dalpha_ch4"] = xr.DataArray(
+        data=dalpha_ch4,
+        dims=("frame", "line")
+    ).astype("float32")
+
+    mtf_out_data["cov_ch4"] = xr.DataArray(
+        data=cov_ch4[0, :, :, :],
+        dims=("line", "wavelength1_ch4", "wavelength2_ch4")
+    ).astype("float32")
+
+    mtf_out_data["cov_inv_ch4"] = xr.DataArray(
+        data=cov_inv_ch4[0, :, :, :],
+        dims=("line", "wavelength1_ch4", "wavelength2_ch4")
+    ).astype("float32")
+
+    mtf_out_data["mask_ch4"] = xr.DataArray(
+        data=mask_ch4,
+        dims=("frame", "line")
+    ).astype("float32")
 
     for var in mtf_out_data.data_vars:
         mtf_out_data[var].encoding.update({"_FillValue": None})
