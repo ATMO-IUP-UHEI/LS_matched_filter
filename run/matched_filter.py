@@ -19,12 +19,12 @@ def main():
     root_data = xr.open_dataset("SYNTH_SPECTRA/L1B_DATA.nc")
 
     # run matched filter
-    win = [[1975, 2095]]
-    alpha_co2, dalpha_co2, cov_co2, cov_inv_co2, mask_co2 =\
+    win = [[1982, 2092]]
+    wl_co2, alpha_co2, dalpha_co2, cov_co2, cov_inv_co2, mask_co2 =\
         matched_filter("co2", win, settings)
 
-    win = [[2120, 2430]]
-    alpha_ch4, dalpha_ch4, cov_ch4, cov_inv_ch4, mask_ch4 =\
+    win = [[2110, 2400]]
+    wl_ch4, alpha_ch4, dalpha_ch4, cov_ch4, cov_inv_ch4, mask_ch4 =\
         matched_filter("ch4", win, settings)
 
     # plot_map(root_data, alpha_co2, dalpha_co2, mask_co2, "co2")
@@ -32,8 +32,8 @@ def main():
 
     write_output(
         root_data,
-        alpha_co2, dalpha_co2, cov_co2, cov_inv_co2, mask_co2,
-        alpha_ch4, dalpha_ch4, cov_ch4, cov_inv_ch4, mask_ch4
+        wl_co2, alpha_co2, dalpha_co2, cov_co2, cov_inv_co2, mask_co2,
+        wl_ch4, alpha_ch4, dalpha_ch4, cov_ch4, cov_inv_ch4, mask_ch4
     )
 
 
@@ -50,8 +50,8 @@ def matched_filter(gas, win, settings):
     # normalize radiances for numerical reasons. t (the target signature)
     # will be normalized automatically, since it is calculated from mu*s,
     # where mu is calculated from x.
-    norm = 1e11
-    x = x / norm
+    # norm = 1e11
+    # x = x / norm
 
     match settings["iterative"]:
         case True:
@@ -97,7 +97,7 @@ def matched_filter(gas, win, settings):
 
         plot_debug(gas, iter, alpha, dalpha, x, mu, t, cov, cov_inv, mask)
 
-    return alpha, dalpha, cov, cov_inv, mask[:, :, 0]
+    return wl, alpha, dalpha, cov, cov_inv, mask[:, :, 0]
 
 
 def get_variables(gas, win, settings):
@@ -374,13 +374,18 @@ def plot_map(root_data, alpha, dalpha, mask, gas):
 
 
 def write_output(root_data,
-                 alpha_co2, dalpha_co2, cov_co2, cov_inv_co2, mask_co2,
-                 alpha_ch4, dalpha_ch4, cov_ch4, cov_inv_ch4, mask_ch4
+                 wl_co2, alpha_co2, dalpha_co2, cov_co2, cov_inv_co2, mask_co2,
+                 wl_ch4, alpha_ch4, dalpha_ch4, cov_ch4, cov_inv_ch4, mask_ch4
                  ):
     mtf_out_data = xr.Dataset()
 
     mtf_out_data["latitude"] = root_data.latitude
     mtf_out_data["longitude"] = root_data.longitude
+
+    mtf_out_data["wavelength_co2"] = xr.DataArray(
+        data=wl_co2,
+        dims="wavelength1_co2"
+    ).astype("float32")
 
     mtf_out_data["alpha_co2"] = xr.DataArray(
         data=alpha_co2,
@@ -405,6 +410,11 @@ def write_output(root_data,
     mtf_out_data["mask_co2"] = xr.DataArray(
         data=mask_co2,
         dims=("frame", "line")
+    ).astype("float32")
+
+    mtf_out_data["wavelength_ch4"] = xr.DataArray(
+        data=wl_ch4,
+        dims="wavelength1_ch4"
     ).astype("float32")
 
     mtf_out_data["alpha_ch4"] = xr.DataArray(
