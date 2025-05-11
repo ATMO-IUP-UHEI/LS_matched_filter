@@ -2,10 +2,10 @@
 &paths
 path%spectrum = 'SYNTH_SPECTRA/'
 path%meteo = 'INPUT/'
-path%sun = '../../../input/solar/hybrid_reference_spectrum_c2021-03-04_with_unc.nc'
+path%sun = '../../../data/input/solar/hybrid_reference_spectrum_c2021-03-04_with_unc.nc'
 path%mie = ''
 path%cirrus = ''
-path%ils = 'CONTRL_OUT/'
+path%ils = '../../../data/input/isrf/isrf_enmap.nc'
 path%output = 'CONTRL_OUT/' /
 
 &flags
@@ -113,10 +113,10 @@ type_x_flag(1) = 1
 !*** Format of cross-section database: 0=Frankenberg, 1=Butz, 2=netCDF, 3=single netCDF file
 type_xsdb(1) = 0
 !*** Path to XSDB
-xsdb_path(1) = '../../../input/xsdb/voigt/co2_4000_7000_hit20.xs'
+xsdb_path(1) = '../../../data/input/xsdb/voigt/co2_4000_7000_hit20.xs'
 type_x(2) = 1
 type_x_flag(2) = 0
 type_xsdb(2) = 0
-xsdb_path(2) = '../../../input/xsdb/voigt/h2o_4000_7000_hit20.xs'
+xsdb_path(2) = '../../../data/input/xsdb/voigt/h2o_4000_7000_hit20.xs'
 !*** Albedo: 0=use satellite data , 1=0th order, 2=1st order, 3=2nd order
 albflag = 0 /
