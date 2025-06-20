@@ -92,13 +92,13 @@ ntype_abs(:) = 2 /
 
 &window1
 !*** lower boundary of spectral window [nm]
-wave_start = 1550
+wave_start = 2100
 !*** upper boundary of spectral window [nm]
-wave_stop = 1755
+wave_stop = 2445
 !*** sampling
 reso = 0.005
 !*** full-width-half-maximum
-fwhm = 10.5
+fwhm = 7.8
 !*** Oversampling ratio
 samp = 2.5
 !*** wavelength boundary offset (in multiples of fwhm)

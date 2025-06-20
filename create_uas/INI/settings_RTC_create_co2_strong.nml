@@ -43,7 +43,7 @@ flag%ils = 1
 !*** 0=from S5P file
 !*** 1=inline calculation of Gaussian ISRF
 !*** 2=from custom file
-flag%ilscalc = 2
+flag%ilscalc = 1
 !*** observer location
 !*** 0=in space
 !*** 1=within the atmosphere
@@ -92,28 +92,28 @@ ntype_abs(:) = 2 /
 
 &window1
 !*** lower boundary of spectral window [nm]
-wave_start = 1550
+wave_start = 1975
 !*** upper boundary of spectral window [nm]
-wave_stop = 1755
+wave_stop = 2095
 !*** sampling
 reso = 0.005
 !*** full-width-half-maximum
-fwhm = 10.5
+fwhm = 8.75
 !*** Oversampling ratio
 samp = 2.5
 !*** wavelength boundary offset (in multiples of fwhm)
-wvbd = 3
+wvbd = 5
 !***Pair of bins for RT K-binning (#1st absorber > #2nd absorber)
 ntau = 20
 ntau_2nd_max = 15
 !*** Absorber type (HITRAN index)
-type_x(1) = 6
+type_x(1) = 2
 !*** Targetflag: 0=interfering absorber, 1=target absorber
 type_x_flag(1) = 1
 !*** Format of cross-section database: 0=Frankenberg, 1=Butz, 2=netCDF, 3=single netCDF file
 type_xsdb(1) = 0
 !*** Path to XSDB
-xsdb_path(1) = '../../../data/input/xsdb/voigt/ch4_4000_7000_hit20.xs'
+xsdb_path(1) = '../../../data/input/xsdb/voigt/co2_4000_7000_hit20.xs'
 type_x(2) = 1
 type_x_flag(2) = 0
 type_xsdb(2) = 0

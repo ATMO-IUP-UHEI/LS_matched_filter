@@ -20,10 +20,12 @@ def main():
 
     # run matched filter
     win = [[1982, 2092]]
+    # win = [[1982, 2092], [1550, 1755]]
     wl_co2, alpha_co2, dalpha_co2, cov_co2, cov_inv_co2, mask_co2 =\
         matched_filter("co2", win, settings)
 
     win = [[2110, 2400]]
+    # win = [[2110, 2400], [1550, 1755]]
     wl_ch4, alpha_ch4, dalpha_ch4, cov_ch4, cov_inv_ch4, mask_ch4 =\
         matched_filter("ch4", win, settings)
 
@@ -45,7 +47,21 @@ def matched_filter(gas, win, settings):
 
     # get wavelength grid, radiances on the spatial grid, and the
     # unit absorption spectrum
-    wl, x, s = get_variables(gas, win, settings)
+    wl = None
+    x = None
+    s = None
+    for win_number, win_range in enumerate(win):
+        this_wl, this_x, this_s = get_variables(
+            gas, win_number + 1, win_range, settings)
+
+        if win_number == 0:
+            wl = this_wl
+            x = this_x
+            s = this_s
+        else:
+            wl = np.append(wl, this_wl)
+            x = xr.concat((x, this_x), dim="wavelength")
+            s = xr.concat((s, this_s), dim="wavelength")
 
     # normalize radiances for numerical reasons. t (the target signature)
     # will be normalized automatically, since it is calculated from mu*s,
@@ -100,7 +116,7 @@ def matched_filter(gas, win, settings):
     return wl, alpha, dalpha, cov, cov_inv, mask[:, :, 0]
 
 
-def get_variables(gas, win, settings):
+def get_variables(gas, win_number, win_range, settings):
     match settings["uas_grid"]:
         case "mean_amf":
             pass
@@ -116,7 +132,8 @@ def get_variables(gas, win, settings):
         f"{rundir}/SYNTH_SPECTRA/L1B_DATA.nc")
     band_data = xr.open_dataset(
         f"{rundir}/SYNTH_SPECTRA/L1B_DATA.nc", group="BAND01")
-    uas_data = xr.open_dataset(f"{scriptdir}/uas/uas_{gas}.nc")
+    uas_data = xr.open_dataset(
+        f"{scriptdir}/uas/uas_{gas}_win_{win_number}.nc")
     Nframes = root_data.sizes["frame"]
     Nlines = root_data.sizes["line"]
 
@@ -125,7 +142,7 @@ def get_variables(gas, win, settings):
     band_data = band_data.assign_coords({"channel": band_data.wavelength})
     band_data = band_data.drop_vars({"wavelength"})
     band_data = band_data.rename({"channel": "wavelength"})
-    band_data = band_data.sel(wavelength=slice(win[0][0], win[0][1]))
+    band_data = band_data.sel(wavelength=slice(win_range[0], win_range[1]))
 
     # extract necessary variables for matched filter
     # wl = wavelength grid on which fit is performed
