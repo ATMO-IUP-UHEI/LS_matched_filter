@@ -17,33 +17,34 @@ def main():
     }
 
     root_data = xr.open_dataset("SYNTH_SPECTRA/L1B_DATA.nc")
+    history_string = ""
 
     # run matched filter
     win = [[1982, 2092]]
     # win = [[1982, 2092], [1550, 1755]]
-    wl_co2, alpha_co2, dalpha_co2, cov_co2, cov_inv_co2, mask_co2 =\
+    wl_co2, alpha_co2, dalpha_co2, cov_co2, cov_inv_co2, mask_co2, history =\
         matched_filter("co2", win, settings)
+    history_string += history
 
     win = [[2110, 2400]]
     # win = [[2110, 2400], [1550, 1755]]
-    wl_ch4, alpha_ch4, dalpha_ch4, cov_ch4, cov_inv_ch4, mask_ch4 =\
+    wl_ch4, alpha_ch4, dalpha_ch4, cov_ch4, cov_inv_ch4, mask_ch4, history =\
         matched_filter("ch4", win, settings)
+    history_string += history
 
     # plot_map(root_data, alpha_co2, dalpha_co2, mask_co2, "co2")
     # plot_map(root_data, alpha_ch4, dalpha_ch4, mask_ch4, "ch4")
 
     write_output(
-        root_data,
+        root_data, history_string,
         wl_co2, alpha_co2, dalpha_co2, cov_co2, cov_inv_co2, mask_co2,
         wl_ch4, alpha_ch4, dalpha_ch4, cov_ch4, cov_inv_ch4, mask_ch4
     )
 
 
 def matched_filter(gas, win, settings):
-    print(
-        f"running matched filter with settings {settings} "
-        f"for gas {gas} with {len(win)} fit windows with boundaries {win}."
-    )
+    history = f"running matched filter with settings {settings} "\
+        + f"for gas {gas} with {len(win)} fit windows with boundaries {win}. "
 
     # get wavelength grid, radiances on the spatial grid, and the
     # unit absorption spectrum
@@ -103,7 +104,7 @@ def matched_filter(gas, win, settings):
         # cov (covariance matrix). also output inverse of covariance matrix
         # and condition number of inversion
         x_masked = x.where(mask == 0, np.nan)
-        mu, cov, cov_inv = statistical_properties(x_masked, settings)
+        mu, cov, cov_inv, ncond = statistical_properties(x_masked, settings)
 
         # get target signature
         t = mu * s
@@ -113,7 +114,9 @@ def matched_filter(gas, win, settings):
 
         plot_debug(gas, iter, alpha, dalpha, x, mu, t, cov, cov_inv, mask)
 
-    return wl, alpha, dalpha, cov, cov_inv, mask[:, :, 0]
+    history += f"condition number for line 0: {ncond}. "
+
+    return wl, alpha, dalpha, cov, cov_inv, mask[:, :, 0], history
 
 
 def get_variables(gas, win_number, win_range, settings):
@@ -265,7 +268,8 @@ def statistical_properties(x_masked, settings):
         case _:
             sys.exit(f"method {settings['method']} not implemented.")
 
-    return mu, cov, cov_inv
+    ncond = np.linalg.cond(cov[0, 0, :, :])
+    return mu, cov, cov_inv, ncond
 
 
 def covariance_skipna(x_masked):
@@ -390,7 +394,7 @@ def plot_map(root_data, alpha, dalpha, mask, gas):
     plt.show(block=True)
 
 
-def write_output(root_data,
+def write_output(root_data, history_string,
                  wl_co2, alpha_co2, dalpha_co2, cov_co2, cov_inv_co2, mask_co2,
                  wl_ch4, alpha_ch4, dalpha_ch4, cov_ch4, cov_inv_ch4, mask_ch4
                  ):
@@ -458,6 +462,8 @@ def write_output(root_data,
         data=mask_ch4,
         dims=("frame", "line")
     ).astype("float32")
+
+    mtf_out_data.attrs["history"] = history_string
 
     for var in mtf_out_data.data_vars:
         mtf_out_data[var].encoding.update({"_FillValue": None})
