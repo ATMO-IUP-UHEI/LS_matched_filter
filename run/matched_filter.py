@@ -13,7 +13,8 @@ def main():
         "method": "linewise",  # linewise, whole_scene
         "iterative": True,  # True, False (False sets iterations=1)
         "iterations": 3,  # int
-        "alpha_mask": "nee"  # nee
+        "alpha_mask": "nee",  # nee
+        "albedo_correction": True  # True, False
     }
 
     root_data = xr.open_dataset("SYNTH_SPECTRA/L1B_DATA.nc")
@@ -95,7 +96,7 @@ def matched_filter(gas, win, settings):
             mask[anom] = iter
         else:
             # filter x for anomalous alpha values
-            anom = get_alpha_mask(alpha, dalpha, mask, settings["alpha_mask"])
+            anom = get_alpha_mask(alpha, dalpha, mask, settings)
 
             # set mask to iteration number only where currently unmasked
             mask[anom[..., np.newaxis] & (mask == 0)] = iter
@@ -110,7 +111,7 @@ def matched_filter(gas, win, settings):
         t = mu * s
 
         # run matched filter
-        alpha, dalpha = run_matched_filter(x, mu, cov_inv, t)
+        alpha, dalpha = run_matched_filter(x, mu, cov_inv, t, settings)
 
         plot_debug(gas, iter, alpha, dalpha, x, mu, t, cov, cov_inv, mask)
 
@@ -182,7 +183,9 @@ def get_variables(gas, win_number, win_range, settings):
     return wl, x, s
 
 
-def get_alpha_mask(alpha, dalpha, mask, method):
+def get_alpha_mask(alpha, dalpha, mask, settings):
+    method = settings["alpha_mask"]
+
     match method:
         case "nee":
             # disregard pixels that are filtered out in the first iteration
@@ -279,7 +282,7 @@ def covariance_skipna(x_masked):
     return cov
 
 
-def run_matched_filter(x, mu, cov_inv, t):
+def run_matched_filter(x, mu, cov_inv, t, settings):
     # alpha = (x - mu) cinv t / t cinv t
     # dalpha = 1/sqrt(t cinv t)
     num = np.einsum("fli,flij,flj->fl", (x-mu), cov_inv, t)
@@ -290,6 +293,15 @@ def run_matched_filter(x, mu, cov_inv, t):
 
     # calculate dalpha on the same grid as x
     dalpha = 1 / np.sqrt(den)
+
+    if settings["albedo_correction"]:
+        # albedo correction according to Foote et al., 2020
+        r_num = np.einsum("fli,flj->fl", x, mu)
+        r_den = np.einsum("fli,flj->fl", mu, mu)
+        r = r_num/r_den
+        r[r == 0] = np.nan
+        alpha = alpha / r
+        dalpha = dalpha / r
 
     alpha = xr.DataArray(alpha, dims={"frame", "line"})
     dalpha = xr.DataArray(dalpha, dims={"frame", "line"})
