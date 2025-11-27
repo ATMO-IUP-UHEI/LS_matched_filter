@@ -1,1 +1,5 @@
+run/uas/*
+!run/uas/plot.py
 create_uas/uas/*
+create_uas/SYNTH_SPECTRA/*
+create_uas/INPUT/*
