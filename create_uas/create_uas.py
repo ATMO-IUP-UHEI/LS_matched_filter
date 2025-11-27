@@ -31,7 +31,7 @@ for obs, elem in enumerate(lst):
     if gas == "co2":
         conc = inp.co2.isel(lon=lon, lat=lat, lev=-1).values
     enh = inp.enhancements.isel(lon=lon, lat=lat).values
-    amf = inp.mean_amf.isel(lon=lon, lat=lat).values
+    amf = inp.total_amf.isel(lon=lon, lat=lat).values
 
     print(f"{obs: 3}", f"{lon: 3}", f"{lat: 3}", f"{conc:.3E}", f"{enh:.2f}", f"{amf:.2f}")
 
@@ -65,11 +65,11 @@ for obs, elem in enumerate(lst):
     if gas == "ch4":
         conc_bg = inp.ch4.isel(lon=lon, lat=0, lev=-1).values
         conc_pix = inp.ch4.isel(lon=lon, lat=lat, lev=-1).values
-        conc_enh = (conc_pix - conc_bg)*1e6  # ppm
+        conc_enh = (conc_pix - conc_bg)/(amf/2)*1e6  # ppm
     if gas == "co2":
         conc_bg = inp.co2.isel(lon=lon, lat=0, lev=-1).values
         conc_pix = inp.co2.isel(lon=lon, lat=lat, lev=-1).values
-        conc_enh = (conc_pix - conc_bg)*1e6  # ppm
+        conc_enh = (conc_pix - conc_bg)/(amf/2)*1e6  # ppm
 
     # get residual spectrum
     uas = radiance_pix - radiance_bg

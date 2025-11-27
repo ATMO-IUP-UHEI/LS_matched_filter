@@ -91,8 +91,11 @@ data["albedo_2000nm"] = xr.DataArray(
 ).astype("float32")
 
 # generate temperature curve
-# stolen from a turkmenistan pixel
-temperature = [191.26947, 220.74019, 214.52698, 212.62027, 209.04094, 206.58559, 206.50642, 208.73889, 210.88342, 212.91727, 214.74251, 216.69302, 218.56128, 220.99455, 223.04814, 224.96338, 227.85973, 231.08394, 234.2546, 237.07098, 239.59401, 242.1424, 244.72778, 247.26695, 249.75653, 252.24036, 254.73994, 257.22632, 259.63913, 261.93005, 264.08087, 266.12656, 268.04312, 269.72568, 271.13547, 272.33545, 273.5517, 274.84506, 276.19662, 277.5877, 279.00128, 280.4308, 281.89957, 283.41507, 284.9685, 286.53674, 288.10297, 289.59775, 290.9289, 292.03818, 292.92377, 293.6516, 294.41013, 295.1759, 295.86624, 295.96704, 294.80182, 295.11316, 296.58817, 298.3027]
+# according to ISA Standard Atmosphere 1976
+isa_altitude = np.array([0, 11019, 20063, 32162, 47350, 51412, 71802, 86000, 1000000])
+isa_temperature = np.array([15, -56.5, -56.5, -44.5, -2.5, -2.5, -58.5, -86.204, -86.204])
+isa_temperature = isa_temperature + 273.15
+temperature = np.interp(height, isa_altitude, isa_temperature)
 temperature_grid = np.tile(temperature, (Nlat, Nlon, 1))
 temperature_grid = np.moveaxis(temperature_grid, (0, 1, 2), (1, 2, 0))
 data["temperature"] = xr.DataArray(
@@ -101,7 +104,7 @@ data["temperature"] = xr.DataArray(
 ).astype("float32")
 
 # generate h2o curve (constant through atmosphere, made up)
-h2o = Nlev*[0.01]
+h2o = Nlev*[0.003]
 h2o_grid = np.tile(h2o, (Nlat, Nlon, 1))
 h2o_grid = np.moveaxis(h2o_grid, (0, 1, 2), (1, 2, 0))
 data["h2o"] = xr.DataArray(
@@ -110,7 +113,7 @@ data["h2o"] = xr.DataArray(
 ).astype("float32")
 
 # generate co2 curve (constant through atmosphere, made up)
-co2 = Nlev*[420e-6]
+co2 = Nlev*[425e-6]
 co2_grid = np.tile(co2, (Nlat, Nlon, 1))
 co2_grid = np.moveaxis(co2_grid, (0, 1, 2), (1, 2, 0))
 data["co2"] = xr.DataArray(
@@ -119,7 +122,7 @@ data["co2"] = xr.DataArray(
 ).astype("float32")
 
 # generate ch4 curve (constant through atmosphere, made up)
-ch4 = Nlev*[1912e-9]
+ch4 = Nlev*[1930e-9]
 ch4_grid = np.tile(ch4, (Nlat, Nlon, 1))
 ch4_grid = np.moveaxis(ch4_grid, (0, 1, 2), (1, 2, 0))
 data["ch4"] = xr.DataArray(
@@ -137,31 +140,38 @@ data["enhancements"] = xr.DataArray(
     data=enhancements,
     dims=("lat", "lon")
 ).astype("float32")
+
 # viewing geometry is usually handled through vza and sza.
-# this can be handled through the airmass factor.
-# COL will be multiplied by AMF_down for half of the light path (downwelling)
-# and multiplied by AMF_up for half of the light path (upwelling).
-# in total, we can multiply the lightpath by the AVERAGE air mass factor.
-# here, we don't multiply the light path, but instead we multiply the
-# concentrations (it's the same, mathematically)
-mean_amf = np.linspace(1, 1/np.cos(np.deg2rad(70)), Ngeometries)
-mean_amf = np.tile(mean_amf, (Nenhancements, 1))
-data["mean_amf"] = xr.DataArray(
-    data=mean_amf,
+# the AMF describes both of these angles in one quantity.
+# COL will be multiplied by AMF_down for the downwelling part of the light path
+# and multiplied by AMF_up for the upwelling part of the light path.
+# In total, the light path experiences a factor of (AMF_down + AMF_up) and only
+# the sum matters, not the individual air mass factors. Air mass factors for
+# a total air mass factor being a light path with SZA and VZA both being 70 degrees
+# are handled here.
+# hack:
+# In RemoTeC, changing the light path requires modification of syn_create.nml.
+# This is tedious. Instead of doing this, the concentration is multiplied by the
+# total air mass factor (halved, because RemoTeC calculates upwelling and downwelling
+# direction separately). Mathematically, this is the same as changing the AMF.
+total_amf = np.linspace(2, 2 * 1/np.cos(np.deg2rad(70)), Ngeometries)
+total_amf = np.tile(total_amf, (Nenhancements, 1))
+data["total_amf"] = xr.DataArray(
+    data=total_amf,
     dims=("lat", "lon")
 ).astype("float32")
 
+# Note: Halving the total_amf for multiplication, RemoTeC will calculate up and down
+# separately and add them together, which gives a factor 2
 if gas == "ch4":
-    data["ch4"] = data.ch4 * data.enhancements
-    data["ch4"] = data.ch4 * data.mean_amf
+    data["ch4"] = data.ch4 * data.enhancements * data.total_amf/2
     data.ch4.attrs["comment"] = "has been multiplied with "\
-                                + "enhancement and mean_amf"
+                                + "enhancement and total_amf/2"
 
 if gas == "co2":
-    data["co2"] = data.co2 * data.enhancements
-    data["co2"] = data.co2 * data.mean_amf
+    data["co2"] = data.co2 * data.enhancements * data.total_amf/2
     data.co2.attrs["comment"] = "has been multiplied with "\
-                                + "enhancement and mean_amf"
+                                + "enhancement and total_amf/2"
 
 for var in data.data_vars:
     data[var].encoding.update({"_FillValue": None})

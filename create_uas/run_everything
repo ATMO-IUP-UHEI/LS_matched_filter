@@ -1,0 +1,13 @@
+./clean.sh
+python3 generate_input.py co2
+./copy_input.sh co2
+~/sds/untracked_software/RemoTeC_dev/RemoTeC_create 1 LST/full.lst
+./copy_output.sh co2
+python3 create_uas.py co2
+./clean.sh
+python3 generate_input.py ch4
+./copy_input.sh ch4
+~/sds/untracked_software/RemoTeC_dev/RemoTeC_create 1 LST/full.lst
+./copy_output.sh ch4
+python3 create_uas.py ch4
+./clean.sh

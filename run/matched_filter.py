@@ -9,7 +9,7 @@ import os
 
 def main():
     settings = {
-        "uas_grid": "mean_amf",  # mean_amf, airmass (not implemented yet)
+        "uas_grid": "total_amf",  # total_amf, airmass (not implemented yet)
         "method": "linewise",  # linewise, whole_scene
         "iterative": True,  # True, False (False sets iterations=1)
         "iterations": 3,  # int
@@ -122,7 +122,7 @@ def matched_filter(gas, win, settings):
 
 def get_variables(gas, win_number, win_range, settings):
     match settings["uas_grid"]:
-        case "mean_amf":
+        case "total_amf":
             pass
         case "airmass":
             sys.exit("uas_grid airmass not implemented.")
@@ -156,21 +156,21 @@ def get_variables(gas, win_number, win_range, settings):
     x = band_data.radiance
 
     # unit absorption spectrum is given for different background spectra. The
-    # correct background spectrum is calculated from the mean_amf of the scene.
+    # correct background spectrum is calculated from the total_amf of the scene.
     sza = np.deg2rad(root_data.solar_zenith_angle)
     vza = np.deg2rad(root_data.viewing_zenith_angle)
-    mean_amf = 0.5 * (1/np.cos(sza) + 1/np.cos(vza))
+    total_amf = 1/np.cos(sza) + 1/np.cos(vza)
 
     match settings["method"]:
         case "linewise":
-            mean_amf = mean_amf.mean(dim="frame")
-            s = uas_data.uas.interp(amf=mean_amf)
+            total_amf = total_amf.mean(dim="frame")
+            s = uas_data.uas.interp(amf=total_amf)
             s = s.expand_dims(dim={"frame": Nframes})
             s = s.drop_vars("amf")
 
         case "whole_scene":
-            mean_amf = mean_amf.mean(dim=("frame", "line"))
-            s = uas_data.uas.interp(amf=mean_amf)
+            total_amf = total_amf.mean(dim=("frame", "line"))
+            s = uas_data.uas.interp(amf=total_amf)
             s = s.expand_dims(dim={"frame": Nframes, "line": Nlines})
             s = s.drop_vars("amf")
 
