@@ -38,8 +38,6 @@ Copy them (copy_output.sh {gas})
 - SYNTH_SPECTRA/ATM_000001.nc -> SYNTH_SPECTRA/ATM_{gas}.nc
 - SYNTH_SPECTRA/L1B_000001.nc -> SYNTH_SPECTRA/L1B_{gas}.nc
 
-Clean up after yourself (clean.sh)
-
 Now you can convert the output files into a uas file using create_uas.py.
 What this basically does is to reformat the RemoTeC output into nicer axes (dummy lat lon -> background and enhancement).
 It then combines the information for each enhancement into one uas for this background concentration.
@@ -47,6 +45,8 @@ The background concentration is determined via the mean AMF.
 TODO: use total air column for this).
 The uas will be placed into uas/uas_{gas}.nc
 Copy it into the directory of the matched filter.
+
+Clean up after yourself (clean.sh)
 
 ## run
 
