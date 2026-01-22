@@ -4,6 +4,6 @@
 #SBATCH --time=00:20:00
 #SBATCH --mem=40G
 #SBATCH --job-name=matched_filter
-#SBATCH --output=slurm/matched_filter/out_%j.out
-#SBATCH --error=slurm/matched_filter/out_%j.out
+#SBATCH --output=slurm/matched_filter/matched_filter_%j.out
+#SBATCH --error=slurm/matched_filter/matched_filter_%j.out
 python3 ~/sds/software/matched_filter/run/matched_filter.py
