@@ -5,7 +5,7 @@ path%meteo = 'INPUT/'
 path%sun = '../../../data/input/solar/hybrid_reference_spectrum_c2021-03-04_with_unc.nc'
 path%mie = ''
 path%cirrus = ''
-path%ils = '../../../data/input/isrf/isrf_enmap.nc'
+path%ils = '../../../data/input/isrf/isrf_enmap_larger_bounds.nc'
 path%output = 'CONTRL_OUT/' /
 
 &flags
@@ -94,7 +94,7 @@ ntype_abs(:) = 2 /
 !*** lower boundary of spectral window [nm]
 wave_start = 2107
 !*** upper boundary of spectral window [nm]
-wave_stop = 2414
+wave_stop = 2525
 !*** sampling
 reso = 0.005
 !*** full-width-half-maximum
@@ -113,10 +113,10 @@ type_x_flag(1) = 1
 !*** Format of cross-section database: 0=Frankenberg, 1=Butz, 2=netCDF, 3=single netCDF file
 type_xsdb(1) = 0
 !*** Path to XSDB
-xsdb_path(1) = '../../../data/input/xsdb/voigt/ch4_4100_4800_hit20_dp50hpa_dT8K_dwn0_02cm1.xs'
+xsdb_path(1) = '../../../data/input/xsdb/voigt/ch4_3900_4800_hit20_dp50hpa_dT8K_dwn0_02cm1.xs'
 type_x(2) = 1
 type_x_flag(2) = 0
 type_xsdb(2) = 0
-xsdb_path(2) = '../../../data/input/xsdb/voigt/h2o_4100_4800_hit20_dp50hpa_dT8K_dwn0_02cm1.xs'
+xsdb_path(2) = '../../../data/input/xsdb/voigt/h2o_3900_4800_hit20_dp50hpa_dT8K_dwn0_02cm1.xs'
 !*** Albedo: 0=use satellite data , 1=0th order, 2=1st order, 3=2nd order
 albflag = 0 /
