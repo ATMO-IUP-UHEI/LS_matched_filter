@@ -10,11 +10,69 @@ import sys
 
 gas = sys.argv[1]
 
-lst = np.loadtxt("LST/full.lst", dtype="str")
 inp = xr.open_dataset(f"INPUT/{gas}.nc")
-l1b = xr.open_dataset(f"SYNTH_SPECTRA/L1B_{gas}.nc", group="BAND1")
+l1b_root = xr.open_dataset(f"SYNTH_SPECTRA/L1B_{gas}.nc")
+l1b_band = xr.open_dataset(f"SYNTH_SPECTRA/L1B_{gas}.nc", group="BAND1")
 
-print("obs lon lat      conc  enh  amf")
+# load info and
+# account for airmass hack where amf_total/2 is multiplied to the concentration
+# instead of actually making the light path longer
+conc = inp[gas].isel(lev=-1)  # assume constant profile through all height levels
+total_amf = inp.total_amf
+conc = conc * 1e6  # ppm
+conc = conc / (total_amf/2)  # hack
+
+# load spectra
+wavelength = l1b_band.wavelength
+radiance_nobs = l1b_band.radiance
+
+# reshape radiance from nobs list to lat lon grid
+# where lat = enhancement dimension and lon = total_amf dimension
+radiance = xr.DataArray(
+    data = np.zeros(shape=(*conc.shape, l1b_band.sizes["nwave"])),
+    dims = ("lat", "lon", "nwave"),
+)
+
+for i in range(l1b_root.sizes["nobs"]):
+    radiance[l1b_root.y[i]-1, l1b_root.x[i]-1, :] = radiance_nobs[i, :]
+    radiance = radiance
+
+background_spectra = radiance[0, :, :]
+enhanced_spectra = radiance[1:, :, :]
+background_concentration = conc[0, :]
+enhanced_concentration = conc[1:, :]
+
+residuals = enhanced_spectra - background_spectra
+enhancements = enhanced_concentration - background_concentration
+uas = (residuals / enhancements).mean(dim="lat") / background_spectra
+
+# save as netcdf
+outpath = f"uas/uas_{gas}.nc"
+
+uas_data = xr.Dataset()
+uas_data = uas_data.expand_dims(
+    dim={
+        "amf": total_amf[0, :].values,
+        "wavelength": wavelength.values
+    }
+)
+
+uas_data["uas"] = xr.DataArray(
+    data=uas.values,
+    dims=("amf", "wavelength")
+).astype("float32")
+
+for var in uas_data.data_vars:
+    uas_data[var].encoding.update({"_FillValue": None})
+
+uas_data.to_netcdf(
+    outpath,
+    mode="w",
+    format="NETCDF4"
+)
+
+sys.exit()
+
 i = 0
 
 amf_list = []
