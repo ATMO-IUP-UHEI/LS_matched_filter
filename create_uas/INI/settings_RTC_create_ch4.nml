@@ -2,7 +2,7 @@
 &paths
 path%spectrum = 'SYNTH_SPECTRA/'
 path%meteo = 'INPUT/'
-path%sun = '../../../data/input/solar/hybrid_reference_spectrum_c2021-03-04_with_unc.nc'
+path%sun = '../../../data/input/solar/solar_irradiance.nc'
 path%mie = ''
 path%cirrus = ''
 path%ils = '../../../data/input/isrf/isrf_enmap_larger_bounds.nc'
@@ -48,10 +48,6 @@ flag%ilscalc = 2
 !*** 0=in space
 !*** 1=within the atmosphere
 flag%observer_location = 0
-!*** solar spectrum
-!*** 0=KNMI NetCDF
-!*** 1=TSIS-1 HSRS NetCDF
-flag%solar = 1
 !*** Spectral grid:
 !*** 1=calculate measurement spectral grid
 !*** 2=read from custom file for S5P: 0=NIR+SWIR,-1=band6, -2=band7, -3=band8

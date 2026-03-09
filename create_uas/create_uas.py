@@ -48,6 +48,7 @@ uas = (residuals / enhancements).mean(dim="lat") / background_spectra
 
 # save as netcdf
 outpath = f"uas/uas_{gas}.nc"
+print(f"saving {outpath}...")
 
 uas_data = xr.Dataset()
 uas_data = uas_data.expand_dims(
